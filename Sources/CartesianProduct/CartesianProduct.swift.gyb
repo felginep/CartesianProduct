@@ -1,0 +1,95 @@
+% for index in range(2, 16):
+%{
+def repeat(format, from_value, to_value):
+  return list(map(lambda x: format.format(x), range(from_value, to_value)))
+def join(string, format, from_value, to_value):
+  return string.join(repeat(format, from_value, to_value))
+def comma_join(format, from_value, to_value):
+  return join(", ", format, from_value, to_value)
+}%
+% generic_types = comma_join("A{}", 1, index + 1)
+% generic_types_skip_last = comma_join("A{}", 1, index)
+% generic_constraints = comma_join("A{}: Collection", 2, index + 1)
+% typealias = comma_join("A{}.Element", 1, index + 1)
+% init_args = comma_join("_ a{0}s: A{0}", 1, index + 1)
+% parameters = comma_join("a{}s", 1, index + 1)
+% parameters_skip_last = comma_join("a{}s", 1, index)
+% tuple = comma_join("element.0.{}", 0, index - 1)
+% generic_types_skip_first = comma_join("A{}", 2, index + 1)
+% instance_variables = join("\n\t", "private let a{0}s: A{0}", 1, index + 1)
+% assignations = join("\n\t\t", "self.a{0}s = a{0}s", 1, index + 1)
+% parameters_skip_first = comma_join("a{}s", 2, index + 1)
+/// -------- ${index} types ${generic_types}--------
+
+%if index > 2:
+public struct CartesianProduct${index}Iterator<${generic_types}>: IteratorProtocol
+    where A1: IteratorProtocol, ${generic_constraints} {
+
+    public typealias Element = (${typealias})
+
+    private var finalIterator: CartesianProduct2Iterator<CartesianProduct${index - 1}Iterator<${generic_types_skip_last}>, A${index}>
+
+    public init(${init_args}) {
+        let productIterator = CartesianProduct${index - 1}Iterator(${parameters_skip_last})
+        finalIterator = CartesianProduct2Iterator(productIterator, a${index}s)
+    }
+
+    public mutating func next() -> Element? {
+        guard let element = finalIterator.next() else {
+            return nil
+        }
+        return (${tuple}, element.1)
+    }
+}
+%else:
+public struct CartesianProduct2Iterator<A1, A2>: IteratorProtocol where A1: IteratorProtocol, A2: Collection {
+
+    public typealias Element = (A1.Element, A2.Element)
+
+    private var a1Iterator: A1
+    private let a2Collection: A2
+    private var a1: A1.Element?
+    private var a2Iterator: A2.Iterator
+
+    public init(_ a1s: A1, _ a2s: A2) {
+        a1Iterator = a1s
+        a2Collection = a2s
+        a1 = a1Iterator.next()
+        a2Iterator = a2Collection.makeIterator()
+    }
+
+    public mutating func next() -> Element? {
+        guard !a2Collection.isEmpty else { return nil }
+        guard let someA1 = a1 else { return nil }
+        guard let someA2 = a2Iterator.next() else {
+            a2Iterator = a2Collection.makeIterator()
+            a1 = a1Iterator.next()
+            return next()
+        }
+        return (someA1, someA2)
+    }
+}
+%end
+
+public struct CartesianProduct${index}Sequence<${generic_types}>: Sequence
+    where A1: Sequence, ${generic_constraints} {
+
+    public typealias Iterator = CartesianProduct${index}Iterator<A1.Iterator, ${generic_types_skip_first}>
+
+    ${instance_variables}
+
+    public init(${init_args}) {
+        ${assignations}
+    }
+
+    public func makeIterator() -> Iterator {
+        return Iterator(a1s.makeIterator(), ${parameters_skip_first})
+    }
+}
+
+public func product<${generic_types}>(${init_args}) -> CartesianProduct${index}Sequence<${generic_types}>
+    where A1: Sequence, ${generic_constraints} {
+        return CartesianProduct${index}Sequence(${parameters})
+}
+
+% end
